@@ -25,10 +25,12 @@ namespace Si_Spawn
                     .Info("Click a unit to spawn it with the Team / Placement settings below. Chat: !spawn <name> [count]")
                     .Switch("!spawn team", "Team", "Which team the spawned objects belong to. MINE = your current team, DEFAULT = the prefab's own faction.", admin: true, current: Cfg.DefaultTeam,
                             ("own", "MINE"), ("sol", "SOL"), ("cent", "CENTAURI"), ("alien", "ALIEN"), ("wild", "WILDLIFE"), ("default", "DEFAULT"))
-                    .Switch("!spawn at", "Placement", "FRONT = distance ahead of your unit, HERE = your unit's position, AIM = where your unit looks, PLAYER / XZ = the last target chosen below.", admin: true, current: Cfg.DefaultPlacement,
-                            ("front", "FRONT"), ("here", "HERE"), ("aim", "AIM"), ("player", "PLAYER"), ("xz", "XZ"))
-                    .Value("!spawn dist", "Distance (m)", "Metres ahead for FRONT and beside a player for PLAYER placement.", admin: true, current: Cfg.DefaultDistance)
+                    .Switch("!spawn at", "Placement", "FRONT = distance ahead of your unit, HERE = beside your unit, AIM = where your unit looks, PLAYER / BASE / XZ = the last target chosen below. Every mode picks the nearest free terrain spot, never on a unit or structure.", admin: true, current: Cfg.DefaultPlacement,
+                            ("front", "FRONT"), ("here", "HERE"), ("aim", "AIM"), ("player", "PLAYER"), ("base", "BASE"), ("xz", "XZ"))
+                    .Value("!spawn dist", "Distance (m)", "Metres ahead of your unit for FRONT placement.", admin: true, current: Cfg.DefaultDistance)
                     .Picker("!spawn near", "Spawn near player", "Places the next spawns next to the chosen player (sticky until you change the placement).", admin: true, arg: "player")
+                    .Picker("!spawn base", "Spawn at a base", "Places the next spawns beside that team's HQ or Nest, on free ground outside its footprint (sticky).", admin: true, arg: "choice",
+                            ("sol", "Sol HQ"), ("cent", "Centauri HQ"), ("alien", "Alien Nest"), ("wild", "Wildlife"))
                     .Value("!spawn xz", "Map coordinates", "Type x z (two numbers) to place spawns at map coordinates (sticky).", admin: true, current: "")
                     .Action("!spawn undo", "Undo last spawn", "Destroys the last object you spawned.", admin: true)
                     .Action("!spawn clear", "Remove all spawned", "Destroys everything spawned through this mod in the current round.", admin: true)

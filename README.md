@@ -13,8 +13,9 @@ Requires the [Admin Mod](https://github.com/data-bomb/Silica) (`Power.Cheat`). O
 | `!spawn <name> [count]` | Spawn a unit or structure. `name` = prefab name or display name, spaces optional (`!spawn light quad`, `!spawn LightQuad`, `!spawn Crab 5`). |
 | `!spawn list [sol\|cent\|alien\|wild\|structures\|other\|text]` | Print spawnable names to the chat. |
 | `!spawn team own\|sol\|cent\|alien\|wild\|default` | Team of the next spawns (sticky per admin). `own` = your team, `default` = the prefab's own faction. |
-| `!spawn at front\|here\|aim` | Placement relative to your unit: `front` = distance ahead, `here` = your position, `aim` = where your unit looks (ray along the view direction, terrain and structures). |
+| `!spawn at front\|here\|aim\|player\|base\|xz` | Placement relative to your unit: `front` = distance ahead, `here` = beside your unit, `aim` = where your unit looks (ray along the view direction, terrain and structures); `player`, `base`, `xz` re-select the last target chosen with the commands below. |
 | `!spawn near <player>` | Placement: next to that player's unit (sticky). |
+| `!spawn base sol\|cent\|alien\|wild` | Placement: beside that team's HQ or Nest, outside its footprint, facing the base (sticky). Falls back to any alive structure of the team. |
 | `!spawn xz <x> <z>` | Placement: map coordinates, snapped to the terrain (sticky). |
 | `!spawn dist <m>` | Distance for `front` and `near` (default 12 m). |
 | `!spawn undo` | Destroy the last object you spawned (walks your own stack). |
@@ -22,8 +23,13 @@ Requires the [Admin Mod](https://github.com/data-bomb/Silica) (`Power.Cheat`). O
 | `!spawn status` | Settings, catalog size, spawn count of the round. |
 | `!spawn enabled on\|off`, `!spawn reload` | Master switch (saved to the config), re-read the config. |
 
-Several objects (`count`) are placed on a grid behind the first position, spaced by the prefab's physical radius.
-Commanders control no unit: use `near <player>` or `xz`. Spawns are announced like other admin actions
+**Free space.** Every mode yields an anchor (your unit, the target player's unit, the HQ/Nest, the aim point or the
+coordinates) and the object goes to the nearest free terrain spot around it: rings starting right outside the anchor's
+physical radius, angles fanning out from the preferred direction, a candidate passes when the terrain is not steeper
+than about 40 degrees and an overlap sphere of the prefab's size hits nothing but terrain (units, vehicles, structures
+and static props all block). Several objects (`count`) each get their own spot. If nothing within ~14 rings is free the
+object is placed on the nearest candidate anyway and the admin is told.
+Commanders control no unit: use `base <team>`, `near <player>` or `xz`. Spawns are announced like other admin actions
 (`AnnounceToAll`). Objects are removed by setting their networked health to zero, the same way Si_SpawnConfigs does.
 
 Name resolution: exact prefab name, exact display name, prefix, substring. A display name that exists for several

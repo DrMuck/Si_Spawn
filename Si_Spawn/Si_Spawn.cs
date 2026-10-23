@@ -5,6 +5,7 @@
    !spawn team <own|sol|cent|alien|wild|default>
    !spawn at <front|here|aim> placement relative to your unit (sticky per admin)
    !spawn near <player>       placement: next to a player (sticky)
+   !spawn base <sol|cent|alien|wild>  placement: next to that team's HQ / Nest (sticky)
    !spawn xz <x> <z>          placement: map coordinates (sticky)
    !spawn dist <m>            distance for "front" / "near"
    !spawn undo                destroy the last object you spawned
@@ -30,7 +31,7 @@ namespace Si_Spawn
 {
     public partial class SpawnMod : MelonMod
     {
-        public const string Version = "1.0.1";
+        public const string Version = "1.1.0";
         const string Tag = "<color=#7FD7FF>[SPAWN]</color> ";
         internal static SpawnConfig Cfg = new SpawnConfig();
 
@@ -57,7 +58,7 @@ namespace Si_Spawn
                     AdminCommandText = "spawn",
                     AdminCallback = Command_Spawn,
                     AdminPower = Power.Cheat,
-                    AdminCommandDescription = "Spawns units/structures at your position. Usage: !spawn <name> [count] | !spawn team|at|near|xz|dist|undo|clear|list|status"
+                    AdminCommandDescription = "Spawns units/structures near you, a player or a base. Usage: !spawn <name> [count] | !spawn team|at|near|base|xz|dist|undo|clear|list|status"
                 });
                 _registered = true;
                 MelonLogger.Msg("[SPAWN] Si_Spawn v" + Version + " loaded, !spawn registered (chat only, no console alias)");
@@ -174,6 +175,12 @@ namespace Si_Spawn
                         if (state.TargetPlayer.Length == 0) { Reply(caller, "no player chosen yet: !spawn near <player>"); return; }
                         state.At = "player"; Reply(caller, "placement: " + PlacementLabel(state)); return;
                     }
+                    if (v == "base" || v == "hq" || v == "nest")
+                    {
+                        if (a.Length > 1) { Base(caller, state, a[1]); return; }
+                        if (state.BaseTeam.Length == 0) { Reply(caller, "no base chosen yet: !spawn base sol|cent|alien|wild"); return; }
+                        state.At = "base"; Reply(caller, "placement: " + PlacementLabel(state)); return;
+                    }
                     if (v == "xz")
                     {
                         if (a.Length > 2) { Xz(caller, state, a[1], a[2]); return; }
@@ -181,10 +188,11 @@ namespace Si_Spawn
                     }
                     if (a.Length == 2 && TryFloat(a[0], out _) && TryFloat(a[1], out _)) { Xz(caller, state, a[0], a[1]); return; }
                     if (v.Length > 0) { Near(caller, state, rest); return; }
-                    Reply(caller, "placement: " + PlacementLabel(state) + " (usage: !spawn at front|here|aim | !spawn near <player> | !spawn xz <x> <z>)");
+                    Reply(caller, "placement: " + PlacementLabel(state) + " (usage: !spawn at front|here|aim | !spawn near <player> | !spawn base <team> | !spawn xz <x> <z>)");
                     return;
                 }
                 case "near": Near(caller, state, rest); return;
+                case "base": case "hq": case "nest": Base(caller, state, rest); return;
                 case "xz":
                 {
                     string[] a = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -238,11 +246,21 @@ namespace Si_Spawn
                 return;
             }
             Team? team = ResolveTeam(caller, state, entry, out string teamLabel);
-            if (!Placement.Resolve(caller, state, Cfg, out Vector3 pos, out Quaternion rot, out string error)) { Reply(caller, error); return; }
+            if (!Placement.Resolve(caller, state, Cfg, out Placement.Anchor anchor, out string error)) { Reply(caller, error); return; }
 
             var prefab = Catalog.PrefabOf(entry);
             if (prefab == null) { Reply(caller, "prefab slot " + entry.Index + " is empty"); return; }
-            var points = count == 1 ? new List<Vector3> { pos } : Placement.Grid(pos, rot, count, entry.Radius);
+            // one free terrain spot per object, rings around the anchor (never on the HQ, a player or another unit)
+            var points = new List<Vector3>();
+            int blocked = 0; float farthest = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                if (!Placement.FindFreeSpot(anchor, entry.Radius, points, out Vector3 spot, out float dist)) blocked++;
+                points.Add(spot);
+                if (dist > farthest) farthest = dist;
+            }
+            Quaternion rot = anchor.Rotation;
+            Vector3 pos = points[0];
             int ok = 0;
             foreach (var p in points)
             {
@@ -257,10 +275,11 @@ namespace Si_Spawn
             }
             if (ok == 0) { Reply(caller, "spawn of " + entry.Display + " failed (see server log)"); return; }
             string what = (ok > 1 ? ok + "x " : "") + entry.Display + (entry.Display != entry.Prefab ? " (" + entry.Prefab + ")" : "");
-            string where = state.At == "here" ? "here" : state.At == "aim" ? "at the aim point" : state.At == "player" ? "near " + state.TargetPlayer : state.At == "xz" ? "at " + Placement.F(pos.x) + " " + Placement.F(pos.z) : Placement.F(state.Dist) + " m ahead";
-            MelonLogger.Msg("[SPAWN] " + caller.PlayerName + " spawned " + what + " for " + teamLabel + " at " + Placement.F(pos.x) + " " + Placement.F(pos.y) + " " + Placement.F(pos.z));
+            string where = state.At == "here" ? "next to you" : state.At == "aim" ? "at the aim point" : state.At == "player" ? "near " + state.TargetPlayer : state.At == "base" ? "at the " + state.BaseTeam + " base" : state.At == "xz" ? "at " + Placement.F(pos.x) + " " + Placement.F(pos.z) : Placement.F(state.Dist) + " m ahead";
+            MelonLogger.Msg("[SPAWN] " + caller.PlayerName + " spawned " + what + " for " + teamLabel + " at " + Placement.F(pos.x) + " " + Placement.F(pos.y) + " " + Placement.F(pos.z) + " (" + where + ", farthest " + Placement.F(farthest) + " m" + (blocked > 0 ? ", " + blocked + " without a free spot" : "") + ")");
             if (Cfg.AnnounceToAll) HelperMethods.AlertAdminAction(caller, "spawned " + what + " for " + teamLabel);
             else Reply(caller, "spawned " + what + " for " + teamLabel + " " + where);
+            if (blocked > 0) Reply(caller, blocked + " object(s) found no free spot within " + Placement.F(farthest) + " m and were placed on the nearest point anyway");
         }
 
         static void Undo(Player caller, AdminState state)
@@ -316,6 +335,22 @@ namespace Si_Spawn
             Reply(caller, "placement: " + PlacementLabel(state));
         }
 
+        static void Base(Player caller, AdminState state, string word)
+        {
+            string w = (word ?? "").Trim().ToLowerInvariant();
+            if (w == "centauri") w = "cent";
+            if (w == "wildlife") w = "wild";
+            if (w == "mine" || w == "own" || w == "my") { Team? t = null; try { t = caller.Team; } catch { } w = t != null ? Catalog.FactionOf(t).ToLowerInvariant() : ""; if (w == "centauri") w = "cent"; if (w == "wildlife") w = "wild"; }
+            if (w != "sol" && w != "cent" && w != "alien" && w != "wild") { Reply(caller, "usage: !spawn base sol|cent|alien|wild"); return; }
+            var team = FindTeam(w);
+            if (team == null) { Reply(caller, "team " + w + " not found in this match"); return; }
+            var hq = Placement.BaseStructureOf(team);
+            if (hq == null) { Reply(caller, NameOf(team) + " has no structure alive to anchor on"); return; }
+            state.BaseTeam = w; state.At = "base";
+            string hqName = ""; try { hqName = hq.ObjectInfo != null ? hq.ObjectInfo.DisplayName : hq.name; } catch { }
+            Reply(caller, "placement: " + PlacementLabel(state) + (hqName.Length > 0 ? " (" + hqName + ")" : ""));
+        }
+
         static void Xz(Player caller, AdminState state, string xs, string zs)
         {
             if (!TryFloat(xs, out float x) || !TryFloat(zs, out float z)) { Reply(caller, "usage: !spawn xz <x> <z>"); return; }
@@ -366,7 +401,7 @@ namespace Si_Spawn
         static void Help(Player? caller)
         {
             Reply(caller, "!spawn <name> [count]  -  !spawn list [sol|cent|alien|wild|structures|text]");
-            Reply(caller, "!spawn team own|sol|cent|alien|wild|default  -  !spawn at front|here|aim  -  !spawn near <player>  -  !spawn xz <x> <z>  -  !spawn dist <m>");
+            Reply(caller, "!spawn team own|sol|cent|alien|wild|default  -  !spawn at front|here|aim  -  !spawn near <player>  -  !spawn base sol|cent|alien|wild  -  !spawn xz <x> <z>  -  !spawn dist <m>");
             Reply(caller, "!spawn undo  -  !spawn clear  -  !spawn status  -  !spawn enabled on|off");
         }
 
@@ -423,7 +458,8 @@ namespace Si_Spawn
             {
                 case "here": return "at your unit";
                 case "aim": return "at your aim point";
-                case "player": return "near " + s.TargetPlayer + " (" + Placement.F(s.Dist) + " m)";
+                case "player": return "near " + s.TargetPlayer;
+                case "base": return "next to the " + s.BaseTeam + " HQ/Nest";
                 case "xz": return "at " + Placement.F(s.X) + " " + Placement.F(s.Z);
                 default: return Placement.F(s.Dist) + " m in front of your unit";
             }
