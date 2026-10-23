@@ -30,7 +30,7 @@ namespace Si_Spawn
 {
     public partial class SpawnMod : MelonMod
     {
-        public const string Version = "1.0.0";
+        public const string Version = "1.0.1";
         const string Tag = "<color=#7FD7FF>[SPAWN]</color> ";
         internal static SpawnConfig Cfg = new SpawnConfig();
 
@@ -46,10 +46,23 @@ namespace Si_Spawn
                 MelonLogger.Warning("[SPAWN] Admin Mod not found: no commands registered");
                 return;
             }
-            HelperMethods.RegisterAdminCommand("spawn", Command_Spawn, Power.Cheat,
-                "Spawns units/structures at your position. Usage: !spawn <name> [count] | !spawn team|at|near|xz|dist|undo|clear|list|status");
-            _registered = true;
-            MelonLogger.Msg("[SPAWN] Si_Spawn v" + Version + " loaded");
+            // Registered straight into the Admin Mod's command list, without the "sam_spawn" console alias that
+            // HelperMethods.RegisterAdminCommand adds: Si_SpawnConfigs owns that console key when it loads first
+            // (duplicate key exception), and would lose its own later commands if we took the key first.
+            try
+            {
+                TakeOverCommand();
+                AdminMethods.AdminCommands.Add(new AdminCommand
+                {
+                    AdminCommandText = "spawn",
+                    AdminCallback = Command_Spawn,
+                    AdminPower = Power.Cheat,
+                    AdminCommandDescription = "Spawns units/structures at your position. Usage: !spawn <name> [count] | !spawn team|at|near|xz|dist|undo|clear|list|status"
+                });
+                _registered = true;
+                MelonLogger.Msg("[SPAWN] Si_Spawn v" + Version + " loaded, !spawn registered (chat only, no console alias)");
+            }
+            catch (Exception ex) { MelonLogger.Error("[SPAWN] registration failed: " + ex); }
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -77,8 +90,6 @@ namespace Si_Spawn
         // registration in its list, so an older duplicate is removed once all mods have initialised.
         static void TakeOverCommand()
         {
-            if (_tookOver) return;
-            _tookOver = true;
             try
             {
                 var list = AdminMethods.AdminCommands;
@@ -89,7 +100,8 @@ namespace Si_Spawn
                 foreach (var d in dupes)
                 {
                     list.Remove(d);
-                    MelonLogger.Msg("[SPAWN] replaced the !spawn command of " + (d.AdminCallback.Method.DeclaringType?.Assembly.GetName().Name ?? "another mod"));
+                    if (!_tookOver) MelonLogger.Msg("[SPAWN] replaced the !spawn chat command of " + (d.AdminCallback.Method.DeclaringType?.Assembly.GetName().Name ?? "another mod") + " (its other commands stay)");
+                    _tookOver = true;
                 }
             }
             catch (Exception ex) { MelonLogger.Warning("[SPAWN] command take-over failed: " + ex.Message); }
